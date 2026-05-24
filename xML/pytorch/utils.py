@@ -4,10 +4,13 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
+    accuracy_score,
     roc_curve,
     auc,
     precision_recall_curve,
     average_precision_score,
+    roc_auc_score,
+    confusion_matrix,
 )
 from sklearn.preprocessing import label_binarize
 from itertools import cycle
@@ -36,6 +39,81 @@ def norm(img):
         [tensor] -- scaled image
     """
     return img / 255.0
+
+
+def compute_classification_metrics(scores, labels, preds=None):
+    """Compute scalar classification metrics from model probabilities.
+
+    For binary classification, returns ACC, AUROC, SENS and SPEC.
+    For multiclass classification, returns ACC plus macro/weighted AUROC
+    and macro-averaged one-vs-rest sensitivity/specificity.
+    """
+
+    scores = np.asarray(scores)
+    labels = np.asarray(labels)
+
+    if preds is None:
+        preds = np.argmax(scores, axis=1)
+    preds = np.asarray(preds)
+
+    nr_classes = scores.shape[1]
+    metrics = {"acc": float(accuracy_score(labels, preds))}
+
+    if nr_classes == 2:
+        try:
+            metrics["auroc"] = float(roc_auc_score(labels, scores[:, 1]))
+        except ValueError:
+            metrics["auroc"] = np.nan
+
+        cm = confusion_matrix(labels, preds, labels=[0, 1])
+        if cm.shape == (2, 2):
+            tn, fp, fn, tp = cm.ravel()
+            metrics["sens"] = float(tp / (tp + fn)) if (tp + fn) > 0 else np.nan
+            metrics["spec"] = float(tn / (tn + fp)) if (tn + fp) > 0 else np.nan
+            metrics["tn"] = int(tn)
+            metrics["fp"] = int(fp)
+            metrics["fn"] = int(fn)
+            metrics["tp"] = int(tp)
+        else:
+            metrics["sens"] = np.nan
+            metrics["spec"] = np.nan
+        return metrics
+
+    try:
+        metrics["auroc_macro_ovr"] = float(
+            roc_auc_score(labels, scores, multi_class="ovr", average="macro")
+        )
+    except ValueError:
+        metrics["auroc_macro_ovr"] = np.nan
+
+    try:
+        metrics["auroc_weighted_ovr"] = float(
+            roc_auc_score(labels, scores, multi_class="ovr", average="weighted")
+        )
+    except ValueError:
+        metrics["auroc_weighted_ovr"] = np.nan
+
+    cm = confusion_matrix(labels, preds, labels=list(range(nr_classes)))
+    sens_per_class = []
+    spec_per_class = []
+    for cls_idx in range(nr_classes):
+        tp = cm[cls_idx, cls_idx]
+        fn = cm[cls_idx, :].sum() - tp
+        fp = cm[:, cls_idx].sum() - tp
+        tn = cm.sum() - tp - fn - fp
+
+        sens_per_class.append(tp / (tp + fn) if (tp + fn) > 0 else np.nan)
+        spec_per_class.append(tn / (tn + fp) if (tn + fp) > 0 else np.nan)
+
+    metrics["sens_macro"] = float(np.nanmean(sens_per_class))
+    metrics["spec_macro"] = float(np.nanmean(spec_per_class))
+    return metrics
+
+
+def save_classification_metrics(path, metrics):
+    """Persist scalar classification metrics to CSV."""
+
+    pd.DataFrame([metrics]).to_csv(path, index=False)
 
 
 def freeze(model):

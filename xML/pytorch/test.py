@@ -156,11 +156,24 @@ def main():
         utils.plot_roc_curve(out_dir, probs, labels)
         utils.plot_precision_recall_curve(out_dir, probs, labels)
 
+    metrics = utils.compute_classification_metrics(probs, labels)
+    metrics_path = os.path.join(out_dir, "classification_metrics.csv")
+    utils.save_classification_metrics(metrics_path, metrics)
+
     # 결과 출력
     print(f"Test Loss : {test_global_loss:.4f}")
     print(f"Exp  Loss : {test_exp_loss:.4f}")
     print(f"Cls  Loss : {test_cls_loss:.4f}")
-    print(f"Accuracy  : {test_acc:.4f}")
+    print(f"ACC       : {metrics['acc']:.4f}")
+    if args.nr_classes == 2:
+        print(f"AUROC     : {metrics['auroc']:.4f}")
+        print(f"SENS      : {metrics['sens']:.4f}")
+        print(f"SPEC      : {metrics['spec']:.4f}")
+    else:
+        print(f"AUROC(m)  : {metrics['auroc_macro_ovr']:.4f}")
+        print(f"SENS(m)   : {metrics['sens_macro']:.4f}")
+        print(f"SPEC(m)   : {metrics['spec_macro']:.4f}")
+    print(f"[INFO] Saved scalar metrics to: {metrics_path}")
 
     # 설명맵 저장
     model.save_explanations(

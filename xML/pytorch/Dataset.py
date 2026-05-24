@@ -140,7 +140,7 @@ class Dataset(torch.utils.data.Dataset):
         img = cv2.imread(img_name, cv2.IMREAD_UNCHANGED)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        if img.shape != self.img_size:
+        if img.shape[:2] != self.img_size:
             img = cv2.resize(img, self.img_size)
 
         label = torch.tensor(self.df.iloc[index]["label"], dtype=torch.int64)
@@ -150,7 +150,7 @@ class Dataset(torch.utils.data.Dataset):
             mask_name = self.df.iloc[index]["maskID"]
             mask = cv2.imread(mask_name, cv2.IMREAD_UNCHANGED)
             mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
-            if mask.shape != self.img_size:
+            if mask.shape[:2] != self.img_size:
                 mask = cv2.resize(mask, self.img_size)
 
         # data augmentation (if aug_prob > 0)
@@ -166,12 +166,12 @@ class Dataset(torch.utils.data.Dataset):
 
         # preprocessing
         img = self.preprocess(img)
-        img = img.transpose(2, 1, 0)
+        img = img.transpose(2, 0, 1)
         img = torch.tensor(img, dtype=torch.float32)
 
         if self.masks:
             mask = self.preprocess(mask)
-            mask = mask.transpose(2, 1, 0)
+            mask = mask.transpose(2, 0, 1)
             mask = torch.tensor(mask, dtype=torch.uint8)
 
         return img, label, img_name, mask
@@ -258,7 +258,7 @@ def load_NIH_NCI(folder, masks=False, class_weights=None):
             ("WRST_HIST_AFTER", -2),
         ]:
             df.loc[df[ft].astype(str) == missing, ft] = np.nan
-            df[ft] = df[ft].astype(np.float)
+            df[ft] = df[ft].astype(float)
 
         for i in np.arange(df.shape[0]):
             row = df.iloc[i]
@@ -278,7 +278,7 @@ def load_NIH_NCI(folder, masks=False, class_weights=None):
     df_["sessionID"] = [index for index, _ in enumerate(dft.GG_PATIENT_ID)]
 
     weights = compute_class_weight(
-        class_weights, classes=np.unique(df.label.values), y=df.label.values
+        class_weights, classes=np.unique(df_.label.values), y=df_.label.values
     )
 
     session_df = df_[["sessionID", "label"]].groupby("sessionID").agg("max")
@@ -306,8 +306,8 @@ def load_NIH_NCI(folder, masks=False, class_weights=None):
         random_state=6,
     )
 
-    tr_df = train_df.loc[df_.sessionID.isin(tr_sessions)]
-    val_df = train_df.loc[df_.sessionID.isin(val_sessions)]
+    tr_df = train_df.loc[train_df.sessionID.isin(tr_sessions)]
+    val_df = train_df.loc[train_df.sessionID.isin(val_sessions)]
 
     print(len(tr_df), len(val_df), len(test_df))
     return tr_df, val_df, test_df, weights, classes
